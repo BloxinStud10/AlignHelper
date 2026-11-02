@@ -81,9 +81,9 @@ const LocalPlayer = Players.LocalPlayer
 const Heartbeat = RunService.Heartbeat
 local GizmoFolder = Instance_new("Folder", Container)
 
-table_insert(cleanTasks, Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
+Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
 	Camera = Workspace.CurrentCamera
-end))
+end)
 
 ------------------------------------------------------------------------------------------------------------------------
 -- Important tuffs
