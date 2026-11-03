@@ -16,6 +16,8 @@ const configurations = {
 
 const MIN_RESIZE = 0.05
 const MAX_RESIZE = 2048
+const MIN_SCALE = 0.1
+const MAX_SCALE = 10
 const PI = 3.141592653589793
 const TWO_PI = PI * 2
 
@@ -479,7 +481,7 @@ end
 ------------------------------------------------------------------------------------------------------------------------
 -- Shared class plumbing (Move / Rotate / Arcball)
 ------------------------------------------------------------------------------------------------------------------------
-const PublicProps = {Adornee = true, Visible = true, AxisType = true}
+const PublicProps = {Adornee = true, Visible = true, AxisType = true, Scale = true}
 
 const makeIndex = function(class)
 	return function(self, key)
@@ -495,6 +497,9 @@ end
 const publicNewIndex = function(self, key, value)
 	local data = rawget(self, "_data")
 	if data and PublicProps[key] then
+		if key == "Scale" then
+			value = clamp(tonumber(value) or 1, MIN_SCALE, MAX_SCALE)
+		end
 		if data[key] ~= value then
 			data[key] = value
 			rawget(self, "Changed"):Fire(key, value)
@@ -510,6 +515,7 @@ const newData = function(className, axisType)
 		Adornee = nil,
 		Visible = true,
 		AxisType = axisType,
+		Scale = 1,
 		InputBegan = CreateSignal(),
 		InputChanged = CreateSignal(),
 		InputEnded = CreateSignal(),
@@ -1167,25 +1173,43 @@ MoveInstance.Update = function(self)
 		return
 	end
 
+	local scale = rawget(self, "_data").Scale
+	local configuration = configurations.Move
+	local shaftLen = configuration.shaftLength * scale
+	local tipLen = configuration.tipLength * scale
+	local radius = configuration.Radius * scale
+
+	if scale ~= self._lastScale then
+		self._lastScale = scale
+		self._originpoint.Radius = 0.1 * scale
+		self._tipFlip = CFrame_new(0, 0, -tipLen * 0.5) * CFrame_Angles(PI, 0, 0)
+	end
+	local tipFlip = self._tipFlip
+
 	local hx, hy, hz = getGroupHalfExtents(self._adornees)
-	local radius = configurations.Move.Radius
 
 	for _, data in self._adornments do
 		local axis = data.axis
 		local dir = axis.dir
-		local offset = abs(dir.X) * hx + abs(dir.Y) * hy + abs(dir.Z) * hz + 0.5
+		local offset = abs(dir.X) * hx + abs(dir.Y) * hy + abs(dir.Z) * hz + 0.5 * scale
 
-		if data.lastOffset ~= offset then
+		if data.lastOffset ~= offset or data.lastScale ~= scale then
 			data.lastOffset = offset
+			data.lastScale = scale
 
 			local inputbox = data.inputbox
 			local shaft = data.shaft
 			local tip = data.tip
 
-			shaft.CFrame = axisCFrameFast(dir, axis.right, axis.up, offset + shaft.Height * 0.5)
-			tip.CFrame = axisCFrameFast(dir, axis.right, axis.up, offset + shaft.Height + tip.Height * 0.5) * TIP_FLIP_CF
+			shaft.Radius = radius
+			shaft.Height = shaftLen
+			tip.Radius = radius * 2.5
+			tip.Height = tipLen
 
-			local overallHeight = shaft.Height + tip.Height
+			shaft.CFrame = axisCFrameFast(dir, axis.right, axis.up, offset + shaftLen * 0.5)
+			tip.CFrame = axisCFrameFast(dir, axis.right, axis.up, offset + shaftLen + tipLen * 0.5) * tipFlip
+
+			local overallHeight = shaftLen + tipLen
 			inputbox.Size = vector_create(radius * 5, radius * 5, overallHeight)
 			inputbox.CFrame = axisCFrameFast(dir, axis.right, axis.up, offset + overallHeight * 0.5)
 		end
@@ -1270,6 +1294,8 @@ MoveInstance.OnChanged = function(self, name, value)
 		self:SyncHolder()
 	elseif name == "AxisType" then
 		self._isWorldSpace = (value == "World")
+		self:SyncHolder()
+	elseif name == "Scale" then
 		self:SyncHolder()
 	elseif name == "Visible" then
 		self._shown = nil
@@ -1438,7 +1464,13 @@ RotateInstance.Update = function(self)
 		return
 	end
 
-	local radius = getGroupRadius(self._adornees) + 1
+	local scale = rawget(self, "_data").Scale
+	if scale ~= self._lastScale then
+		self._lastScale = scale
+		self._originpoint.Radius = 0.1 * scale
+	end
+
+	local radius = (getGroupRadius(self._adornees) + 1) * scale
 	if radius == self._lastRadius then
 		return
 	end
@@ -1574,6 +1606,8 @@ RotateInstance.OnChanged = function(self, name, value)
 		self:SyncHolder()
 	elseif name == "AxisType" then
 		self._isWorldSpace = (value == "World")
+		self:SyncHolder()
+	elseif name == "Scale" then
 		self:SyncHolder()
 	elseif name == "Visible" then
 		self._shown = nil
@@ -1776,7 +1810,13 @@ end
 ArcballInstance.Update = function(self)
 	if #self._adornees == 0 then return end
 
-	local radius = getGroupRadius(self._adornees)
+	local scale = rawget(self, "_data").Scale
+	if scale ~= self._lastScale then
+		self._lastScale = scale
+		self._adornments.origin.Radius = 0.1 * scale
+	end
+
+	local radius = getGroupRadius(self._adornees) * scale
 
 	if radius ~= self._lastRadius then
 		self._lastRadius = radius
@@ -1872,6 +1912,8 @@ ArcballInstance.OnChanged = function(self, name, value)
 		self:SyncHolder()
 	elseif name == "AxisType" then
 		self._isWorldSpace = (value == "World")
+		self:SyncHolder()
+	elseif name == "Scale" then
 		self:SyncHolder()
 	elseif name == "Visible" then
 		self._shown = nil
